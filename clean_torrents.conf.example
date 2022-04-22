@@ -1,0 +1,12 @@
+[qbittorrent]
+host = http://localhost:8080
+user = admin
+pass = admin
+
+[pause]
+ratio = 2
+categories = movies,tvshows,music,games,anime,software,books,xxx,other
+
+[delete]
+ratio = 2
+categories = movies,tvshows,music,games,anime,software,books,xxx,other
