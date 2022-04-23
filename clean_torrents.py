@@ -4,11 +4,10 @@
 A simple script to log into a qbittorrent client and clean up completed torrents.
 """
 
-from dataclasses import dataclass
 import logging
 
-from configparser import ConfigParser, NoOptionError, NoSectionError
-import string
+from dataclasses import dataclass
+from configparser import ConfigParser
 from qbittorrent import Client
 from pathlib import Path
 from requests.exceptions import InvalidSchema

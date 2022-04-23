@@ -3,7 +3,17 @@ host = http://localhost:8080
 user = admin
 pass = admin
 
-[category]
+[category1]
 ratio = 2
 status = seeding
 action = pause
+
+[category2]
+ratio = 3.9
+status = completed
+action = delete
+
+[category3]
+ration = 10
+status = seeding
+action = delete_permanently
