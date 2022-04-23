@@ -4,9 +4,11 @@
 A simple script to log into a qbittorrent client and clean up completed torrents.
 """
 
+from dataclasses import dataclass
 import logging
 
 from configparser import ConfigParser, NoOptionError, NoSectionError
+import string
 from qbittorrent import Client
 from pathlib import Path
 from requests.exceptions import InvalidSchema
@@ -32,23 +34,40 @@ if not config_file.is_file():
 
 logging.info("Digesting config file.")
 
-config_opts.read(config_file)
 
-try:
-    for element in config_opts.sections():
-        if element == "qbittorrent":
-            qb_host = config_opts.get(element, "host")
-            qb_user = config_opts.get(element, "user")
-            qb_pass = config_opts.get(element, "pass")
-        elif element == "pause":
-            pause_ration = config_opts.get(element, "ratio")
-            pause_categories = config_opts.get(element, "categories").split(",")
-        elif element == "delete":
-            delete_ratio = config_opts.get(element, "ratio")
-            delete_categories = config_opts.get(element, "categories").split(",")
-except [NoOptionError, NoSectionError]:
-    logging.error("Config file is missing required options. Exiting.")
-    exit(1)
+@dataclass
+class Category:
+    _name: str
+    _ratio: float
+    _status: str
+    _action: str
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def ratio(self) -> float:
+        return self._ratio
+
+    @ratio.setter
+    def ratio(self, value: str):
+        self._ratio = float(value)
+
+    @property
+    def status(self) -> str:
+        return self._status
+
+    @property
+    def action(self):
+        return getattr(Client, self._action)
+
+    @action.setter
+    def action(self, value):
+        if value in ["delete", "pause", "delete_permanently"]:
+            self._action = value
+        else:
+            raise ValueError("Invalid action.")
 
 
 def is_complete(torrent) -> bool:
@@ -61,6 +80,26 @@ def get_ratio(torrent) -> float:
     return float(torrent["ratio"])
 
 
+config_opts.read(config_file)
+
+categories = []
+
+
+for element in config_opts.sections():
+    if element == "qbittorrent":
+        qb_host = config_opts.get(element, "host")
+        qb_user = config_opts.get(element, "user")
+        qb_pass = config_opts.get(element, "pass")
+    else:
+        categories.append(
+            Category(
+                element,
+                float(config_opts.get(element, "ratio")),
+                config_opts.get(element, "status"),
+                config_opts.get(element, "action"),
+            )
+        )
+
 qb = Client(qb_host)
 
 # Login to qbittorrent client
@@ -72,35 +111,16 @@ except InvalidSchema:
     )
     exit(1)
 
-# Stop *arr downloads if completed. The *arr will handle removal.
+# Process categories
 
-for category in pause_categories:
-    torrents = qb.torrents(category=category, filter="Seeding")
-
-    for torrent in torrents:
-        if is_complete(torrent) and get_ratio(torrent) >= float(pause_ration):
-            logging.debug(
-                torrent["hash"] + " " + torrent["name"] + " " + str(get_ratio(torrent))
-            )
-            logging.info("Pausing torrent: " + torrent["name"])
-            qb.pause(torrent["hash"])
-
-# Remove sports downloads if completed. Plex will handle file deletion.
-
-for category in delete_categories:
-    torrents = qb.torrents(category=category, filter="Seeding")
+for category in categories:
+    torrents = qb.torrents(category=category.name, filter=category.status)
 
     for torrent in torrents:
-        if is_complete(torrent) and get_ratio(torrent) >= float(delete_ratio):
-            logging.debug(
-                torrent["hash"] + " " + torrent["name"] + " " + str(get_ratio(torrent))
-            )
-            logging.info("Deleting torrent: " + torrent["name"])
-            qb.delete(torrent["hash"])
-
-# TODO: Add support for permanent deletion of torrents.
-
-# Logout of qbittorrent client if session is still valid.
+        if is_complete(torrent):
+            if get_ratio(torrent) >= category.ratio:
+                logging.info(f"Actioning {torrent['name']}")
+                category.action(qb, torrent["hash"])
 
 try:
     qb.logout()
